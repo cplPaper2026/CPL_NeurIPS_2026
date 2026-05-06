@@ -1,0 +1,12 @@
+# K-way multi-hypothesis baseline (winner-take-all path + selector CE).
+# Load with: python train.py --config configs/multi_hypothesis.yaml
+#
+# model.multi_hypothesis.enabled, run.use_cpl, and run.use_ar are mutually exclusive
+# (enforced in RoadCplConfig.__post_init__).
+
+
+model:
+  multi_hypothesis:
+    enabled: true
+    num_hypotheses: 6
+    ce_weight: 1.0

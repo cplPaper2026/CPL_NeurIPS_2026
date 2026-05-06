@@ -1,0 +1,15 @@
+# Hungarian supervision without CPL: stable mean path between modes (see path_heads_loss).
+# Load with: python train.py --config configs/hungarian_mean_path.yaml
+
+run:
+  matching: hungarian
+  heatmap_weight: 10.0
+  offset_loss: mse
+  offset_weight: 0.1
+  num_epochs: 300
+  learning_rate: 0.0003
+  batch_size: 256
+
+hungarian:
+  dist_weight: 0.1
+  prob_weight: 10.0
