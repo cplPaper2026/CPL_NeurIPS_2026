@@ -1,15 +1,8 @@
 # Multi-Modal Path Prediction on nuScenes Maps
 
-Code for the **multi-modal path prediction** experiment in the
-*Contextual Plackett-Luce* (CPL) paper. See the top-level
-[`README.md`](../README.md) for the abstract and a description of the
-overall project.
+Code for the **multi-modal path prediction** experiment in the *Contextual Plackett-Luce* (CPL) paper. See the top-level [`README.md`](../README.md) for the abstract and a description of the overall project.
 
-The task: given a 256x256 BEV RGB rendering of a local road graph (with
-the ego pose baked in), predict one geometrically valid driving path.
-The training supervision is one of several valid ground-truth paths
-sampled at random per draw, so the model must commit to a single
-coherent continuation rather than averaging across modes.
+The task: given a 256x256 BEV RGB rendering of a local road graph (with the ego pose baked in), predict one geometrically valid driving path. The training supervision is one of several valid ground-truth paths sampled at random per draw, so the model must commit to a single coherent continuation rather than averaging across modes.
 
 ## Architecture
 
@@ -25,9 +18,7 @@ image (3, 256, 256)               # BEV RGB: drivable area + lane dividers + ego
   -> optional sequence head: CPLHead | ARDecoderHead | MultiHypothesisHead
 ```
 
-A predicted point at cell `(i, j)` is reconstructed as
-`(x, y) = (j*D + dx[i, j], i*D + dy[i, j])` in full-resolution pixels
-(`D = 8` by default).
+A predicted point at cell `(i, j)` is reconstructed as `(x, y) = (j*D + dx[i, j], i*D + dy[i, j])` in full-resolution pixels (`D = 8` by default).
 
 ## 1. Install
 
@@ -36,24 +27,15 @@ cd nuscenes_path_prediction
 pip install -r requirements.txt
 ```
 
-The required dependencies are listed in [`requirements.txt`](requirements.txt):
-`numpy`, `opencv-python`, `shapely`, `scipy`, `h5py`, `torch`,
-`matplotlib`, `tqdm`, `pyyaml`, plus `nuscenes-devkit` (needed for the
-map-based generator) and `comet-ml` (only used when Comet logging is
-enabled).
+The required dependencies are listed in [`requirements.txt`](requirements.txt): `numpy`, `opencv-python`, `shapely`, `scipy`, `h5py`, `torch`, `matplotlib`, `tqdm`, `pyyaml`, plus `nuscenes-devkit` (needed for the map-based generator) and `comet-ml` (only used when Comet logging is enabled).
 
 ## 2. Data preparation
 
-The benchmark used in the paper is built from the **nuScenes maps
-expansion**. A purely procedural fallback is also included for users
-without nuScenes access (Step D below).
+The benchmark used in the paper is built from the **nuScenes maps expansion**. A purely procedural fallback is also included for users without nuScenes access (Step D below).
 
 ### Step A. Download the nuScenes maps expansion
 
-Download the **Maps expansion** archive from the nuScenes website
-(https://www.nuscenes.org/download — requires a free account) and
-extract it. Only the four map JSON files are needed (no images, no
-LiDAR), which gives a final layout like
+Download the **Maps expansion** archive from the nuScenes website (https://www.nuscenes.org/download — requires a free account) and extract it. Only the four map JSON files are needed (no images, no LiDAR), which gives a final layout like
 
 ```
 <dataroot>/
@@ -76,29 +58,18 @@ python generate_nuscenes_paths.py \
     --seed 0
 ```
 
-This writes 10k `(.npz, .json)` pairs under `data/nuscenes/train/` and
-`data/nuscenes/val/` (deterministic 80/20 split by sample index, set
-via `--train-frac`). Each `.npz` follows the
-`heatmap_offset_rgb_v1` schema:
+This writes 10k `(.npz, .json)` pairs under `data/nuscenes/train/` and `data/nuscenes/val/` (deterministic 80/20 split by sample index, set via `--train-frac`). Each `.npz` follows the `heatmap_offset_rgb_v1` schema:
 
 - `image`        `uint8 (3, H, W)`           — RGB BEV with the ego marker baked in.
 - `points`       `float32 (K_MAX, M_MAX, 2)` — zero-padded full-resolution `(x, y)` GT points starting at the ego, sparsified so no two points fall in the same `D x D` grid cell.
 - `num_points`   `int32 (K_MAX,)`            — number of valid points per path slot.
 - `valid_paths`  `uint8 (K_MAX,)`            — 1 if the slot is a real GT path.
 
-Defaults: BEV `256x256` at `0.5 m/px`, `K_MAX=6` paths per sample,
-`M_MAX=64` points per path. Per-path sparsification is arc-length
-resampling at `D * sqrt(2)` step + greedy per-cell deduplication so
-that the `(K_MAX, M_MAX, 2)` arrays carry at most one point per
-`D x D` cell, which is what the heatmap+offset training expects.
+Defaults: BEV `256x256` at `0.5 m/px`, `K_MAX=6` paths per sample, `M_MAX=64` points per path. Per-path sparsification is arc-length resampling at `D * sqrt(2)` step + greedy per-cell deduplication so that the `(K_MAX, M_MAX, 2)` arrays carry at most one point per `D x D` cell, which is what the heatmap+offset training expects.
 
 ### Step C. (Optional) Stratified re-split by number of paths
 
-`generate_nuscenes_paths.py` already writes a deterministic 80/20 split,
-but its split is *index-based* and not balanced across the number of
-valid paths per sample. If you want a split that preserves the
-`n_paths` distribution across train and val, regenerate everything
-into a single folder (`--train-frac 1.0`) and then call:
+`generate_nuscenes_paths.py` already writes a deterministic 80/20 split, but its split is *index-based* and not balanced across the number of valid paths per sample. If you want a split that preserves the `n_paths` distribution across train and val, regenerate everything into a single folder (`--train-frac 1.0`) and then call:
 
 ```bash
 python split_nuscenes_train_val.py \
@@ -112,65 +83,44 @@ python split_nuscenes_train_val.py \
     --seed 42
 ```
 
-`--distribution` is the desired fraction per `n_paths` bucket
-(positions are `n_paths=1, 2, 3, ...`). `--from-largest` is an
-alternative greedy mode that keeps whole rare buckets first. Add
-`--dry-run` to see the planned counts without copying any files.
+`--distribution` is the desired fraction per `n_paths` bucket (positions are `n_paths=1, 2, 3, ...`). `--from-largest` is an alternative greedy mode that keeps whole rare buckets first. Add `--dry-run` to see the planned counts without copying any files.
 
 ### Step D. (Optional) Procedural-only synthetic fallback
 
-If you do not have access to the nuScenes maps, the procedural
-generator [`generate_data.py`](generate_data.py) produces a similar BEV
-schema (with a 2-channel `(road, ego_heatmap)` `image` instead of
-3-channel RGB) without any external data:
+If you do not have access to the nuScenes maps, the procedural generator [`generate_data.py`](generate_data.py) produces a similar BEV schema (with a 2-channel `(road, ego_heatmap)` `image` instead of 3-channel RGB) without any external data:
 
 ```bash
 python generate_data.py --n 10000 --out data/synthetic/ --workers 8 --seed 0
 ```
 
-Use this only for smoke tests; the paper numbers use the nuScenes-derived
-benchmark from Steps A and B.
+Use this only for smoke tests; the paper numbers use the nuScenes-derived benchmark from Steps A and B.
 
 ## 3. Training
 
-Run all commands from inside `nuscenes_path_prediction/`. The
-`--data-root` flag points at the directory that contains the
-`train/` and `val/` subfolders produced in Step B.
+Run all commands from inside `nuscenes_path_prediction/`. The `--data-root` flag points at the directory that contains the `train/` and `val/` subfolders produced in Step B.
 
 The loss has two orthogonal axes: matching strategy and head mode.
 
 ```bash
 # Grid-supervised baseline (default: matching=grid, no sequence head)
 python train.py --data-root data/nuscenes/
-
 # Hungarian matched heatmap baseline (DETR-style)
 python train.py --config configs/hungarian_mean_path.yaml \
     --data-root data/nuscenes/
-
 # Multi-hypothesis baseline (winner-take-all path + selector CE)
 python train.py --config configs/multi_hypothesis.yaml \
     --data-root data/nuscenes/
-
 # CPL ordering head (replaces heatmap classification under grid matching)
 python train.py --use-cpl --data-root data/nuscenes/
-
 # Autoregressive pointer head (transformer decoder)
 python train.py --use-ar --data-root data/nuscenes/
 ```
 
-Paper-aligned defaults (same as the dataclass defaults in
-[`train_config.py`](train_config.py)): AdamW with `lr=3e-4`, weight
-decay `1e-4`, `batch_size=256`, `num_epochs=300`, horizontal-flip
-augmentation enabled. Heatmap BCE weight 10, offset L1 weight 5.
+Paper-aligned defaults (same as the dataclass defaults in [`train_config.py`](train_config.py)): AdamW with `lr=3e-4`, weight decay `1e-4`, `batch_size=256`, `num_epochs=300`, horizontal-flip augmentation enabled. Heatmap BCE weight 10, offset L1 weight 5.
 
-Hungarian matcher costs (`HungarianCostConfig`) default to
-`prob_weight=1` and `dist_weight=1`; [`configs/hungarian_mean_path.yaml`](configs/hungarian_mean_path.yaml)
-overrides them to `prob_weight=10` and `dist_weight=0.1` for the mean-path baseline.
+Hungarian matcher costs (`HungarianCostConfig`) default to `prob_weight=1` and `dist_weight=1`; [`configs/hungarian_mean_path.yaml`](configs/hungarian_mean_path.yaml) overrides them to `prob_weight=10` and `dist_weight=0.1` for the mean-path baseline.
 
-CPL and AR sequence heads minimise per-step cross-entropy over grid
-cells (including the EOS slot); see [`cpl_module.py`](cpl_module.py) and
-[`ar_module.py`](ar_module.py). This codebase does **not** use the
-CIFAR-style `pre_eos_weight` / `post_eos_weight` knobs from the subset-selection experiment.
+CPL and AR sequence heads minimise per-step cross-entropy over grid cells (including the EOS slot); see [`cpl_module.py`](cpl_module.py) and [`ar_module.py`](ar_module.py). This codebase does **not** use the CIFAR-style `pre_eos_weight` / `post_eos_weight` knobs from the subset-selection experiment.
 
 Useful overrides:
 
@@ -178,37 +128,27 @@ Useful overrides:
 # Override individual loss term weights and the offset criterion
 python train.py --offset-loss smooth_l1 --offset-weight 0.5 \
     --heatmap-weight 1.0 --ar-weight 1.0
-
 # Open NPZ samples on demand (use when the dataset doesn't fit in RAM)
 python train.py --lazy-data --data-root data/nuscenes/
-
 # Disable Comet logging for the run
 python train.py --no-comet --data-root data/nuscenes/
 ```
 
-Training writes two best-by-metric checkpoints under
-`run.resolved_save_dir` (default
-`train/<head>_<matching>/<stem>/`):
+Training writes two best-by-metric checkpoints under `run.resolved_save_dir` (default `train/<head>_<matching>/<stem>/`):
 
 - `best_min_ade_model.pth` — lowest validation `val_min_ade`.
 - `best_min_hd_model.pth`  — lowest validation `val_min_hd`.
 
-Each checkpoint embeds the full validation `metrics` dict at save
-time. The fully resolved configuration is dumped alongside as
-`config_resolved.json`.
+Each checkpoint embeds the full validation `metrics` dict at save time. The fully resolved configuration is dumped alongside as `config_resolved.json`.
 
 ### YAML configuration overlays
 
-Training YAML files merge as **patches** onto
-`get_default_road_cpl_config()`; unknown keys raise `KeyError`. Prefer
-listing only fields that differ from the Python defaults. Two reference
-overlays ship in [`configs/`](configs/):
+Training YAML files merge as **patches** onto `get_default_road_cpl_config()`; unknown keys raise `KeyError`. Prefer listing only fields that differ from the Python defaults. Two reference overlays ship in [`configs/`](configs/):
 
 - [`configs/hungarian_mean_path.yaml`](configs/hungarian_mean_path.yaml) — Hungarian matching with the stable mean-path baseline.
 - [`configs/multi_hypothesis.yaml`](configs/multi_hypothesis.yaml) — K-way multi-hypothesis baseline.
 
-Mutually exclusive head modes (`use_cpl`, `use_ar`,
-`model.multi_hypothesis.enabled`) are enforced at config time.
+Mutually exclusive head modes (`use_cpl`, `use_ar`, `model.multi_hypothesis.enabled`) are enforced at config time.
 
 ## 4. Validation / test-only
 
@@ -217,9 +157,7 @@ python train.py --test-only \
     --checkpoint train/cpl_grid/<stem>/best_min_ade_model.pth
 ```
 
-This loads the checkpoint, runs the standard validation pass (loss +
-path metrics + visualisations), and exits. The validation metrics
-(reported in full-resolution pixel coordinates) are:
+This loads the checkpoint, runs the standard validation pass (loss + path metrics + visualisations), and exits. The validation metrics (reported in full-resolution pixel coordinates) are:
 
 | Metric        | Meaning                                                                                  |
 |---------------|------------------------------------------------------------------------------------------|
@@ -232,13 +170,7 @@ path metrics + visualisations), and exits. The validation metrics
 
 ## 5. Inference runtime profiling
 
-For paper-style runtime comparisons across model variants (supervised,
-multi-hypothesis, CPL, AR), add `--profile-inference` to a
-`--test-only` run with `--batch-size 1`. The trainer first runs the
-standard validation pass, then a dedicated inference-timing pass over
-the eval loader: a few warmup batches (no measurement), followed by a
-hook-driven, three-bucket timed loop. The report is printed and saved
-as `inference_timing.json` next to the checkpoint.
+For paper-style runtime comparisons across model variants (supervised, multi-hypothesis, CPL, AR), add `--profile-inference` to a `--test-only` run with `--batch-size 1`. The trainer first runs the standard validation pass, then a dedicated inference-timing pass over the eval loader: a few warmup batches (no measurement), followed by a hook-driven, three-bucket timed loop. The report is printed and saved as `inference_timing.json` next to the checkpoint.
 
 ```bash
 python train.py --test-only \
@@ -261,24 +193,13 @@ Reported keys (milliseconds):
 | `*_forward_total_ms`      | Top-level `model.forward`.                                               |
 | `*_total_inference_ms`    | `forward_total + decode`.                                                |
 
-Each metric is reported as both `avg_batch_*` (mean over batches) and
-`per_example_*` (sum / total examples seen). The profiler is
-implemented as forward hooks on `model.backbone`, `model.transformer`,
-the optional sequence head, and a non-invasive monkey-patch around
-`head.greedy_decode`; the existing inference loop in `train.py` is not
-touched. Paper numbers were measured on an NVIDIA A100 with
-`--batch-size 1`.
+Each metric is reported as both `avg_batch_*` (mean over batches) and `per_example_*` (sum / total examples seen). The profiler is implemented as forward hooks on `model.backbone`, `model.transformer`, the optional sequence head, and a non-invasive monkey-patch around `head.greedy_decode`; the existing inference loop in `train.py` is not touched. Paper numbers were measured on an NVIDIA A100 with `--batch-size 1`.
 
 ## 6. Comet logging (optional)
 
-Comet logging is opt-in: it activates only when `COMET_API_KEY` is set
-in the environment and `comet.enabled` is True (the default). Pass
-`--no-comet` to disable it for a single run.
+Comet logging is opt-in: it activates only when `COMET_API_KEY` is set in the environment and `comet.enabled` is True (the default). Pass `--no-comet` to disable it for a single run.
 
-The defaults in [`train_config.py`](train_config.py) use the placeholder
-workspace `your-comet-workspace` and project `cpl-road`. Override both
-in a YAML overlay (`comet.workspace`, `comet.project_name`) before
-publishing your runs.
+The defaults in [`train_config.py`](train_config.py) use the placeholder workspace `your-comet-workspace` and project `cpl-road`. Override both in a YAML overlay (`comet.workspace`, `comet.project_name`) before publishing your runs.
 
 ## Output format
 
@@ -295,19 +216,11 @@ data/nuscenes/                         # produced by Step B
 
 ## Implementation notes
 
-- The model emits raw heatmap logits (no sigmoid); BCE-with-logits is
-  applied inside `PathHeadsLoss`.
-- Offsets are unconstrained pixel deltas; `L1Loss` (or `SmoothL1Loss`)
-  is applied only on cells that the matcher considers positive.
-- The Hungarian matcher uses predicted sub-pixel points for the cost,
-  tightly coupling the heatmap and offset heads during matching.
-- Validation metrics (`min-ADE`, `min-HD`, `min-HD-p90`, `off-road`)
-  are computed in full-resolution pixel coordinates so the binarised
-  road channel can be queried directly for the off-road rate.
-- Generator knobs include `H`, `W` (default `256`), `D` (default `8`
-  -> 32x32 grid), `K_MAX` (max paths per sample, default 6), `M_MAX`
-  (max points per path after sparsification, default 64), and
-  `lane_width_px`.
+- The model emits raw heatmap logits (no sigmoid); BCE-with-logits is applied inside `PathHeadsLoss`.
+- Offsets are unconstrained pixel deltas; `L1Loss` (or `SmoothL1Loss`) is applied only on cells that the matcher considers positive.
+- The Hungarian matcher uses predicted sub-pixel points for the cost, tightly coupling the heatmap and offset heads during matching.
+- Validation metrics (`min-ADE`, `min-HD`, `min-HD-p90`, `off-road`) are computed in full-resolution pixel coordinates so the binarised road channel can be queried directly for the off-road rate.
+- Generator knobs include `H`, `W` (default `256`), `D` (default `8` -> 32x32 grid), `K_MAX` (max paths per sample, default 6), `M_MAX` (max points per path after sparsification, default 64), and `lane_width_px`.
 
 ## Project layout
 
